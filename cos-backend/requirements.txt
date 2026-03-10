@@ -1,0 +1,30 @@
+# ─── COS Backend Dependencies ─────────────────────────────────────────────
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+pgvector==0.3.6
+alembic==1.14.1
+
+# AI / Embeddings
+sentence-transformers==3.3.1
+numpy==2.2.1
+scikit-learn==1.6.1
+
+# LLM
+openai==1.58.1
+
+# Background Tasks
+redis==5.2.1
+apscheduler==3.11.0
+
+# HTTP / CORS
+httpx==0.28.1
+
+# Utilities
+python-dotenv==1.0.1
