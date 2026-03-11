@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Graph</title>
+  
+  <script type="text/javascript" src="vis-network.min.js"></script>
+  
+  <link rel="stylesheet" href="graph.css">
+</head>
+<body>
+  
+  <div class="header-overlay">
+    <div class="header-inner">
+      <div class="icon-box">🕸️</div>
+      <div>
+        <h1>Cognitive Graph</h1>
+        <div class="subtitle">Semantic relationships between contexts</div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="loading">Mapping cognitive memory...</div>
+  <div id="mynetwork"></div>
+
+  <!-- Detail Panel -->
+  <div class="detail-panel" id="detail-panel">
+    <button class="close-btn" id="close-panel">✕</button>
+    <div class="section-label">Selected Context</div>
+    <div class="node-title" id="node-title"></div>
+    <div class="node-url" id="node-url"></div>
+    <div class="node-summary" id="node-summary"></div>
+  </div>
+
+  <script src="graph.js"></script>
+</body>
+</html>

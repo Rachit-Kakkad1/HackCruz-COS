@@ -1,0 +1,29 @@
+# Common OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+
+# Node
+node_modules/
+dist/
+build/
+.npm
+.cache
+
+# Databases
+*.db
+*.sqlite3
+
+# Local secrets
+*.pem
+*.key
+.env
+.env.local

@@ -1,0 +1,12 @@
+mss==7.0.1
+pytesseract==0.3.10
+psutil==5.9.8
+pywin32==306; sys_platform == 'win32'
+faster-whisper==1.0.1
+pyttsx3==2.91
+keyboard==0.13.5
+requests==2.31.0
+opencv-python==4.9.0.80
+numpy==1.26.4
+SpeechRecognition==3.10.1
+PyAudio==0.2.14

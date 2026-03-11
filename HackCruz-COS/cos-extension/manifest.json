@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Cognitive OS",
+  "version": "2.0.0",
+  "description": "Premium semantic memory engine for browsing context.",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "scripting",
+    "identity"
+  ],
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cognitive OS"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle_overlay": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space",
+        "mac": "MacCtrl+Shift+Space"
+      },
+      "description": "Trigger floating context recall overlay"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "overlay.html",
+        "overlay.css",
+        "overlay.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

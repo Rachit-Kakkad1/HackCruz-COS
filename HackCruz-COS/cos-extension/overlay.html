@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognitive Recall Overlay</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  
+  <div class="overlay-backdrop" id="backdrop"></div>
+  
+  <div class="overlay-modal" id="modal">
+    <div class="modal-header">
+      <div class="icon-box">🧠</div>
+      <div>
+        <h1>Cognitive OS</h1>
+        <div class="subtitle">Quick Recall</div>
+      </div>
+      <button class="close-btn" id="close-btn">✕</button>
+    </div>
+    
+    <div class="modal-content">
+      <div class="intro-text">You were previously working on:</div>
+      
+      <div class="context-card" id="context-card" style="display:none;">
+        <h2 id="ctx-title">Loading...</h2>
+        <div class="ctx-url" id="ctx-url"></div>
+        <p class="ctx-summary" id="ctx-summary"></p>
+        <div class="ctx-meta">
+          <span id="ctx-time"></span>
+        </div>
+      </div>
+      
+      <div class="loading" id="loading">Retrieving cognitive memory...</div>
+      <div class="error" id="error" style="display:none;"></div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="dismiss-btn">Dismiss</button>
+      <button class="btn btn-primary" id="resume-btn" disabled>Resume Context</button>
+    </div>
+  </div>
+
+  <script src="overlay.js"></script>
+</body>
+</html>

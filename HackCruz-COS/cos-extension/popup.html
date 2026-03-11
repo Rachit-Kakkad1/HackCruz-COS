@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cognitive OS</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  
+  <div class="popup-container">
+  
+  <div class="header">
+    <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+      <div class="brand">
+        <span class="logo">🧠</span>
+        <div class="title-group">
+          <h1>Cognitive OS</h1>
+          <span class="version">v2</span>
+        </div>
+      </div>
+      
+      <div id="user-profile" style="display:none; align-items:center; gap:8px;">
+        <div style="text-align:right;">
+          <div id="user-name" style="font-size:12px; font-weight:600; color:#E5E7EB;"></div>
+          <div id="user-email" style="font-size:10px; color:#9CA3AF;"></div>
+        </div>
+        <img id="user-avatar" src="" alt="Avatar" style="width:28px; height:28px; border-radius:14px; border: 1px solid rgba(255,255,255,0.1);">
+      </div>
+    </div>
+  </div>
+
+  <div class="status-panel">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting to local core...</span>
+  </div>
+
+  <div class="action-grid">
+    <button class="btn btn-primary" id="recall-btn" style="grid-column: 1 / -1;">
+      <span class="btn-icon">⚡</span>
+      Recall Context
+    </button>
+    <button class="btn btn-secondary" id="timeline-btn">
+      <span class="btn-icon">⏱️</span>
+      Timeline
+    </button>
+    <button class="btn btn-secondary" id="graph-btn">
+      <span class="btn-icon">🕸️</span>
+      Graph
+    </button>
+  </div>
+  
+  <!-- Settings & Identity Area -->
+  <div style="margin-top: 16px; margin-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9CA3AF; font-weight: 600;">System Controls</div>
+  
+  <div class="action-grid">
+    <button class="btn btn-secondary" id="pause-btn" style="grid-column: 1 / -1;">
+      <span class="btn-icon">⏸️</span>
+      <span id="pause-text">Pause Monitoring</span>
+    </button>
+    <button class="btn btn-secondary" id="login-btn" style="grid-column: 1 / -1;">
+      <span class="btn-icon">🛡️</span>
+      <span id="login-text">Sign in with Google</span>
+    </button>
+    <button class="btn btn-secondary" id="logout-btn" style="display:none; grid-column: 1 / -1;">
+      <span class="btn-icon">🚪</span>
+      Sign Out
+    </button>
+    <button class="btn btn-secondary" id="reset-btn" style="grid-column: 1 / 2;">
+      <span class="btn-icon">🗑️</span>
+      Reset Memory
+    </button>
+    <button class="btn btn-secondary" id="privacy-btn" style="grid-column: 2 / -1;">
+      <span class="btn-icon">🛡️</span>
+      Privacy Info
+    </button>
+  </div>
+
+  <div class="error" id="error-msg" style="display:none;"></div>
+
+  <div class="result-card" id="result-card">
+    <div class="section-label">Most Relevant Context</div>
+    <div class="result-title" id="result-title"></div>
+    <a href="#" target="_blank" class="result-url" id="result-url"></a>
+    <div class="result-summary" id="result-summary"></div>
+    <div class="result-time" id="result-time"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

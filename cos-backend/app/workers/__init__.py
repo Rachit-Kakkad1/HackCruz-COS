@@ -1,1 +1,0 @@
-"""COS Backend — Workers Package."""
