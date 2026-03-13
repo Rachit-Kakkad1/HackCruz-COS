@@ -9,6 +9,7 @@ persisted alongside the index via pickle.
 import os
 import pickle
 import logging
+from typing import Optional, List
 
 import numpy as np
 import faiss
@@ -102,6 +103,13 @@ class VectorStore:
             results.append(entry)
 
         return results
+
+    def get_index_by_context_id(self, context_id: int) -> Optional[int]:
+        """Find the FAISS index position for a given context_id."""
+        for i, meta in enumerate(self.metadata):
+            if meta.get("context_id") == context_id:
+                return i
+        return None
 
     def get_all_embeddings(self) -> np.ndarray:
         """Return all stored vectors as an (N, dim) numpy array."""

@@ -1,30 +1,52 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, Network, Mic, Clock, Brain } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Activity, Network, Mic, Clock, Brain, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ContextTimeline from './ContextTimeline';
 import CognitiveGraph from './CognitiveGraph';
 import FocusRadar from './FocusRadar';
+import TimelineSlider from './TimelineSlider';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('graph');
   const [health, setHealth] = useState(false);
-
   const [focusSuggestion, setFocusSuggestion] = useState(null);
+  
+  // Time Travel State
+  const [isTimeTraveling, setIsTimeTraveling] = useState(false);
+  const [scrubTime, setScrubTime] = useState(Math.floor(Date.now() / 1000));
+  const [timeRange, setTimeRange] = useState({ min: 0, max: 0 });
+  const [historicalGraph, setHistoricalGraph] = useState(null);
+
+  const fetchTimeRange = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:8000/time_range');
+      const data = await res.json();
+      setTimeRange(data);
+      if (!isTimeTraveling) {
+        setScrubTime(data.max);
+      }
+    } catch (err) {
+      console.error('Failed to fetch time range:', err);
+    }
+  }, [isTimeTraveling]);
 
   useEffect(() => {
-    // Check backend health
     fetch('http://localhost:8000/health')
       .then(res => res.json())
       .then(data => setHealth(data.status === 'ok'))
       .catch(() => setHealth(false));
       
-    // WebSocket for Focus Radar suggestions
+    fetchTimeRange();
+
     const ws = new WebSocket('ws://localhost:8000/ws');
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'focus_radar_suggestion') {
-        console.log('Focus Radar Suggestion:', data);
         setFocusSuggestion(data);
+      }
+      if (data.type === 'graph_update' && !isTimeTraveling) {
+        // Refresh time range on new live data
+        fetchTimeRange();
       }
     };
 
@@ -39,7 +61,25 @@ export default function Dashboard() {
       clearInterval(interval);
       ws.close();
     };
-  }, []);
+  }, [fetchTimeRange, isTimeTraveling]);
+
+  const handleScrub = async (time) => {
+    setScrubTime(time);
+    const isNow = time >= timeRange.max;
+    setIsTimeTraveling(!isNow);
+
+    if (!isNow) {
+      try {
+        const res = await fetch(`http://localhost:8000/contexts_at_time?timestamp=${time}`);
+        const data = await res.json();
+        setHistoricalGraph(data);
+      } catch (err) {
+        console.error('Temporal query failed:', err);
+      }
+    } else {
+      setHistoricalGraph(null);
+    }
+  };
 
   const handleResume = async (contextId) => {
     try {
@@ -50,68 +90,73 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-cos-bg text-cos-text font-sans">
+    <div className="flex h-screen bg-[#050505] text-white font-sans selection:bg-emerald-500/30">
       
       {/* Sidebar Layout */}
-      <aside className="w-64 border-r border-white/5 bg-cos-surface/50 backdrop-blur-xl flex flex-col items-center py-8 z-20">
+      <aside className="w-72 border-r border-emerald-500/10 bg-black/40 backdrop-blur-3xl flex flex-col items-center py-10 z-20">
         
         {/* Brand */}
-        <div className="flex items-center gap-3 w-full px-6 mb-12">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cos-accent1 to-cos-accent2 flex items-center justify-center shadow-[0_0_20px_rgba(110,124,255,0.3)]">
-            <Brain size={20} className="text-white" />
-          </div>
+        <div className="flex items-center gap-4 w-full px-8 mb-16">
+          <motion.div 
+            whileHover={{ scale: 1.05, rotate: 5 }}
+            className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+          >
+            <Brain size={24} className="text-white" />
+          </motion.div>
           <div>
-            <h1 className="font-semibold tracking-tight text-white">Cognitive OS</h1>
-            <p className="text-[11px] text-cos-textMuted uppercase tracking-wider font-medium mt-0.5">Control Center</p>
+            <h1 className="font-bold tracking-tight text-xl bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">COS</h1>
+            <p className="text-[10px] text-emerald-400/70 uppercase tracking-[0.2em] font-bold mt-0.5">Neural Layer</p>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="w-full px-4 flex flex-col gap-2">
+        <nav className="w-full px-6 flex flex-col gap-3">
           <button 
             onClick={() => setActiveTab('graph')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${
               activeTab === 'graph' 
-                ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/5' 
-                : 'text-cos-textMuted hover:bg-white/5 hover:text-white'
+                ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)] border border-emerald-500/20' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300 border border-transparent'
             }`}
           >
-            <Network size={18} />
-            <span className="font-medium text-sm">Cognitive Graph</span>
+            <Network size={20} />
+            <span className="font-semibold text-sm">Thinking Map</span>
           </button>
           
           <button 
             onClick={() => setActiveTab('timeline')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${
               activeTab === 'timeline' 
-                ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/5' 
-                : 'text-cos-textMuted hover:bg-white/5 hover:text-white'
+                ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)] border border-emerald-500/20' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300 border border-transparent'
             }`}
           >
-            <Clock size={18} />
-            <span className="font-medium text-sm">Context Timeline</span>
+            <Clock size={20} />
+            <span className="font-semibold text-sm">Chronology</span>
           </button>
         </nav>
 
-        <div className="mt-auto w-full px-6">
-          {/* Status Indicator */}
-          <div className="flex items-center gap-2 px-4 py-3 bg-cos-surface rounded-xl border border-white/5">
-            <div className={`w-2 h-2 rounded-full ${health ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)] animate-pulse' : 'bg-red-500'}`} />
-            <span className="text-xs font-medium text-cos-textMuted">
-              {health ? 'Core Online' : 'Core Offline'}
-            </span>
-          </div>
-          
-          {/* Voice Indicator */}
-          <div className="mt-4 flex items-center gap-2 px-4 py-3 bg-cos-surface rounded-xl border border-white/5">
-           <Mic size={14} className="text-cos-accent2" />
-           <span className="text-xs text-cos-textMuted">Ctrl+Alt+Space to Speak</span>
+        <div className="mt-auto w-full px-8 pb-4">
+          <div className="p-5 flex flex-col gap-4 bg-emerald-500/5 rounded-3xl border border-emerald-500/10">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-widest font-bold text-gray-500">Core Engine</span>
+              <div className={`w-2 h-2 rounded-full ${health ? 'bg-emerald-400 shadow-[0_0_12px_#10b981]' : 'bg-red-500'} animate-pulse`} />
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Mic size={16} className="text-blue-500" />
+              <span className="text-[11px] font-bold text-gray-400 italic">Listening for Ctrl+Alt+Space</span>
+            </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cos-accent1/10 via-cos-bg to-cos-bg">
+      <main className="flex-1 relative overflow-hidden bg-black">
+        {/* Background Ambient Glow */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-600/10 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/5 blur-[100px] rounded-full -ml-32 -mb-32 pointer-events-none" />
+
         <AnimatePresence mode="wait">
           {activeTab === 'graph' ? (
             <motion.div 
@@ -119,24 +164,34 @@ export default function Dashboard() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.02 }}
-              transition={{ duration: 0.3 }}
               className="absolute inset-0"
             >
-              <CognitiveGraph />
+              <CognitiveGraph 
+                isHistorical={isTimeTraveling} 
+                historicalData={historicalGraph}
+                onRestore={handleResume}
+              />
             </motion.div>
           ) : (
             <motion.div 
               key="timeline"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="absolute inset-0 overflow-y-auto"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute inset-0 overflow-y-auto px-12 py-16"
             >
               <ContextTimeline />
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Global Time Travel Controls */}
+        <TimelineSlider 
+          min={timeRange.min} 
+          max={timeRange.max} 
+          value={scrubTime} 
+          onChange={handleScrub} 
+        />
       </main>
 
       <FocusRadar 

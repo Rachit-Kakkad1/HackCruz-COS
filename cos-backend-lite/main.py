@@ -14,14 +14,15 @@ import subprocess
 import webbrowser
 from datetime import datetime, timezone
 
+import time
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 from embedder import generate_embedding
 from vector_store import vector_store
-from database import init_db, insert_context, get_recent, get_all_contexts, get_all_edges
+from database import init_db, insert_context, get_recent, get_all_contexts, get_all_edges, get_contexts_before
 from graph_engine import process_new_context
 from clustering_engine import cluster_contexts
 
@@ -249,7 +250,7 @@ async def ingest_context(ctx: AppContext):
         5. Run graph engine to find similar contexts.
     """
     # Resolve timestamp
-    ts = ctx.timestamp or datetime.now(timezone.utc).isoformat()
+    ts = int(time.time()) if ctx.timestamp is None else int(ctx.timestamp)
 
     # Combine title + text for richer embedding
     combined_text = f"{ctx.title}. {ctx.text or ''}"
@@ -299,7 +300,7 @@ async def ingest_context(ctx: AppContext):
 @app.post("/context/os")
 async def ingest_os_context(ctx: OSContext):
     """Ingest a Snapshot of the active OS Window."""
-    ts = ctx.timestamp or datetime.now(timezone.utc).isoformat()
+    ts = int(time.time()) if ctx.timestamp is None else int(ctx.timestamp)
     
     combined_text = f"[{ctx.app}] {ctx.window_title}"
     embedding = generate_embedding(combined_text)
@@ -337,7 +338,8 @@ async def ingest_os_context(ctx: OSContext):
 @app.post("/context/screen")
 async def ingest_screen_context(ctx: ScreenContextInput):
     """Ingest OCR text extracted from the user's screen."""
-    ts = ctx.timestamp or datetime.now(timezone.utc).isoformat()
+    import time
+    ts = int(time.time()) if ctx.timestamp is None else int(ctx.timestamp)
     
     combined_text = ctx.text
     embedding = generate_embedding(combined_text)
@@ -451,27 +453,81 @@ async def recall_context():
     )
 
 
-@app.get("/timeline")
-async def get_timeline():
-    """Returns all context history ordered by timestamp descending."""
-    contexts = get_all_contexts()
-    return {"timeline": contexts}
+# ─── Temporal Reconstruction Engine ──────────────────────────────────────
+import numpy as np
 
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-@app.get("/graph")
-async def get_graph():
-    """Returns clustered 'Task' nodes for a human-readable cognitive graph."""
-    contexts = get_all_contexts() # SQLite metadata
-    embeddings = vector_store.get_all_embeddings() # FAISS vectors
+def build_graph_at_time(timestamp: int):
+    """
+    Rebuilds the cognitive graph for a specific historical point.
+    1. Fetches contexts in a 24-hour window: [timestamp - 24h, timestamp]
+    2. Clusters contexts into Task-Level nodes
+    3. Recomputes graph for tasks
+    """
+    from database import get_contexts_before
+    from vector_store import vector_store
+    from clustering_engine import cluster_contexts
     
-    if len(contexts) == 0:
+    # 24 hour window in seconds
+    WINDOW_SIZE = 24 * 60 * 60 
+    since = timestamp - WINDOW_SIZE
+    
+    contexts = get_contexts_before(timestamp, since=since)
+    
+    if not contexts:
         return {"nodes": [], "edges": []}
+        
+    # Retrieve embeddings for the window
+    embeddings = []
+    valid_contexts = []
+    for ctx in contexts:
+        meta_id = vector_store.get_index_by_context_id(ctx["id"])
+        if meta_id is not None:
+            embeddings.append(vector_store.index.reconstruct(meta_id))
+            valid_contexts.append(ctx)
+            
+    if not valid_contexts:
+        return {"nodes": [], "edges": []}
+        
+    embeddings_np = np.array(embeddings).astype('float32')
+    
+    # Run clustering to get Task-Level nodes
+    task_nodes, task_edges = cluster_contexts(valid_contexts, embeddings_np)
+    
+    # Format for frontend
+    return {
+        "nodes": task_nodes,
+        "edges": task_edges,
+        "is_windowed": True,
+        "window_start": since,
+        "window_end": timestamp
+    }
 
-    # Use the clustering engine to group contexts into Tasks
-    nodes, edges = cluster_contexts(contexts, embeddings)
+@app.get("/contexts_at_time")
+async def get_contexts_at_time(timestamp: int):
+    """Temporal query endpoint for Memory Time-Travel."""
+    try:
+        graph = build_graph_at_time(timestamp)
+        return graph
+    except Exception as e:
+        logger.error(f"Time-travel query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {"nodes": nodes, "edges": edges}
-
+@app.get("/time_range")
+async def get_time_range():
+    """Returns the earliest and latest context timestamps."""
+    contexts = get_all_contexts()
+    if not contexts:
+        now = int(time.time())
+        return {"min": now, "max": now}
+    
+    timestamps = [c['timestamp'] for c in contexts]
+    return {
+        "min": min(timestamps),
+        "max": max(timestamps)
+    }
 
 @app.post("/reset")
 async def reset_memory():

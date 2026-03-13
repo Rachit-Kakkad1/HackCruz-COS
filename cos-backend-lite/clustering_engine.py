@@ -55,48 +55,57 @@ def cluster_contexts(contexts: list[dict], embeddings: np.ndarray):
     # 3. Process each cluster into a "Task" node
     task_nodes = []
     for label, group in clusters.items():
-        # Heuristic: Create a task label from the most common words in titles
-        all_titles = " ".join([c['title'] for c in group])
-        # Remove common technical noise
-        cleaned_titles = re.sub(r'https?://\S+|localhost:\d+|v\d+', '', all_titles)
-        words = re.findall(r'\w+', cleaned_titles.lower())
-        filtered_words = [w for w in words if w not in STOPWORDS and len(w) > 2]
+        # Representative metadata
+        latest = sorted(group, key=lambda x: x['timestamp'], reverse=True)[0]
         
-        # Get top words, but prioritize nouns/verbs by length
-        top_words = [w[0] for w in Counter(filtered_words).most_common(5)]
-        task_label = " ".join(top_words[:2]).title() or group[0]['title']
-        
-        # Advanced Categorization
-        text_blob = (all_titles + " " + " ".join([c.get('summary', '') for c in group])).lower()
-        
-        if any(w in text_blob for w in ["code", "py", "js", "html", "css", "git", "vscode", "npm", "rust", "react"]):
+        # Heuristic: Create a task label from the most common words or best title
+        # For small clusters, use the latest title as basis
+        if len(group) <= 2:
+            task_label = latest['title']
+        else:
+            all_titles = " ".join([c['title'] for c in group])
+            cleaned_titles = re.sub(r'https?://\S+|localhost:\d+|v\d+|-|_', ' ', all_titles)
+            words = re.findall(r'\w+', cleaned_titles.lower())
+            filtered_words = [w for w in words if w not in STOPWORDS and len(w) > 3]
+            
+            # Use top words to construct a label
+            freq = Counter(filtered_words).most_common(3)
+            if freq:
+                task_label = " ".join([w[0] for w in freq]).title()
+            else:
+                task_label = latest['title']
+
+        # Categorization logic
+        text_blob = (all_titles + " " + " ".join([c.get('summary', '') or '' for c in group])).lower()
+        if any(w in text_blob for w in ["code", "py", "js", "ts", "html", "css", "git", "vscode", "npm", "rust", "react", "terminal"]):
             category = "Coding"
-        elif any(w in text_blob for w in ["write", "doc", "notion", "edit", "proposal", "slack", "mail", "chat"]):
+        elif any(w in text_blob for w in ["write", "doc", "notion", "edit", "proposal", "slack", "mail", "chat", "discord"]):
             category = "Writing"
-        elif any(w in text_blob for w in ["research", "wiki", "paper", "learn", "study", "analysis"]):
+        elif any(w in text_blob for w in ["research", "wiki", "paper", "learn", "study", "analysis", "arxiv"]):
             category = "Research"
-        elif any(w in text_blob for w in ["google", "browse", "amazon", "youtube", "twitter", "reddit"]):
+        elif any(w in text_blob for w in ["google", "browse", "amazon", "youtube", "twitter", "reddit", "facebook"]):
             category = "Browsing"
         else:
             category = "Activity"
 
-        # Representative metadata
-        latest = sorted(group, key=lambda x: x['timestamp'], reverse=True)[0]
-        
+        # Limit label length
+        if len(task_label) > 40:
+            task_label = task_label[:37] + "..."
+
         task_nodes.append({
             "id": f"task_{label}",
-            "label": task_label if len(task_label) > 3 else "Active Context",
+            "label": task_label,
             "category": category,
-            "summary": f"Semantic cluster of {len(group)} context events detected.",
+            "summary": f"Task involving {len(group)} interactions. Priority: {category}.",
             "count": len(group),
             "last_active": latest['timestamp'],
+            "timestamp": latest['timestamp'], # For frontend compatibility
             "contexts": group,
+            "app": latest.get('app', category),
             "url": latest['url']
         })
 
-    # 4. Generate edges between tasks (optional, based on inter-cluster similarity)
-    # For now, let's just return the tasks. Edges are harder with clusters.
-    # A simple approach: if two tasks share raw context edges, they are linked.
-    # But for a "Future OS" feel, maybe just show the distinct tasks for now.
-    
+    # 4. Generate edges between tasks based on overlap or similarity
+    # Simple approach: If any context in task A is similar to any in task B
+    # But for performance in windowed mode, we can just return nodes for now.
     return task_nodes, []

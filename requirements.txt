@@ -1,0 +1,6 @@
+sentence-transformers>=2.2.0,<3.0
+faiss-cpu
+torch
+scikit-learn
+schedule
+numpy

@@ -25,29 +25,71 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def init_db():
-    """Create tables if they do not exist."""
+    """Create tables if they do not exist with migration support."""
     conn = _get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS contexts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            url TEXT NOT NULL,
-            summary TEXT,
-            app TEXT,
-            workspace TEXT,
-            timestamp TEXT NOT NULL
-        )
-    """)
-    
-    # Migration: Add columns if they don't exist
-    try:
-        cursor.execute("ALTER TABLE contexts ADD COLUMN app TEXT")
-    except sqlite3.OperationalError: pass
-    try:
-        cursor.execute("ALTER TABLE contexts ADD COLUMN workspace TEXT")
-    except sqlite3.OperationalError: pass
+    # Check if we need to migrate
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contexts'")
+    exists = cursor.fetchone()
+
+    if exists:
+        # Check if timestamp is already INTEGER (or at least if we've done this migration)
+        cursor.execute("PRAGMA table_info(contexts)")
+        columns = {row['name']: row['type'] for row in cursor.fetchall()}
+        if columns.get('timestamp') == 'TEXT':
+            logger.info("Migrating database schema for Memory Time-Travel...")
+            
+            # Check if contexts_old already exists (possibly from a failed previous attempt)
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contexts_old'")
+            if cursor.fetchone():
+                cursor.execute("DROP TABLE contexts_old")
+            
+            cursor.execute("ALTER TABLE contexts RENAME TO contexts_old")
+            cursor.execute("""
+                CREATE TABLE contexts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    summary TEXT,
+                    app TEXT,
+                    workspace TEXT,
+                    cluster_id INTEGER,
+                    timestamp INTEGER NOT NULL
+                )
+            """)
+            
+            # Migration logic (shared)
+            _run_migration(conn)
+            
+        else:
+            # Check if we are in a stuck state: contexts is empty but contexts_old exists
+            cursor.execute("SELECT COUNT(*) FROM contexts")
+            contexts_count = cursor.fetchone()[0]
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contexts_old'")
+            old_table_exists = cursor.fetchone()
+            
+            if contexts_count == 0 and old_table_exists:
+                logger.info("Empty contexts table found with existing contexts_old. Resuming migration...")
+                _run_migration(conn)
+            else:
+                # Table exists and is migrated, ensure columns exist
+                try: cursor.execute("ALTER TABLE contexts ADD COLUMN cluster_id INTEGER")
+                except sqlite3.OperationalError: pass
+                conn.commit()
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contexts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                summary TEXT,
+                app TEXT,
+                workspace TEXT,
+                cluster_id INTEGER,
+                timestamp INTEGER NOT NULL
+            )
+        """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS context_edges (
@@ -65,10 +107,56 @@ def init_db():
     logger.info(f"Database initialized at {DB_PATH}")
 
 
-def insert_context(title: str, url: str, summary: str, timestamp: str, app: str = None, workspace: str = None) -> int:
+def _run_migration(conn):
+    """Internal helper to run the migration from contexts_old to contexts."""
+    cursor = conn.cursor()
+    
+    # Check what columns exist in contexts_old to avoid errors
+    cursor.execute("PRAGMA table_info(contexts_old)")
+    old_columns = [row['name'] for row in cursor.fetchall()]
+    
+    # Build the SELECT clause with defaults for missing columns
+    app_val = "app" if "app" in old_columns else "'unknown'"
+    workspace_val = "workspace" if "workspace" in old_columns else "'default'"
+    
+    # Perform insertion
+    cursor.execute(f"""
+        INSERT INTO contexts (id, title, url, summary, app, workspace, timestamp)
+        SELECT 
+            id, 
+            title, 
+            url, 
+            summary, 
+            {app_val}, 
+            {workspace_val},
+            CAST(strftime('%s', timestamp) AS INTEGER)
+        FROM contexts_old
+    """)
+    
+    # Safety check: Compare row counts
+    cursor.execute("SELECT COUNT(*) FROM contexts")
+    new_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM contexts_old")
+    old_count = cursor.fetchone()[0]
+    
+    if new_count == old_count:
+        cursor.execute("DROP TABLE contexts_old")
+        conn.commit()
+        logger.info(f"Database migration complete. {new_count} rows migrated.")
+    else:
+        logger.error(f"Migration mismatch: {old_count} old rows vs {new_count} new rows. Keeping contexts_old.")
+        conn.rollback()
+
+
+def insert_context(title: str, url: str, summary: str, timestamp: int = None, app: str = None, workspace: str = None) -> int:
     """
     Insert a new context record and return its ID.
+    Timestamp should be Unix epoch seconds.
     """
+    if timestamp is None:
+        import time
+        timestamp = int(time.time())
+    
     conn = _get_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -82,19 +170,11 @@ def insert_context(title: str, url: str, summary: str, timestamp: str, app: str 
 
 
 def get_recent(limit: int = 1) -> list[dict]:
-    """
-    Retrieve the most recent context records.
-
-    Args:
-        limit: Number of records to return (default 1).
-
-    Returns:
-        List of context dicts sorted by most recent first.
-    """
+    """Retrieve the most recent context records."""
     conn = _get_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, title, url, summary, timestamp FROM contexts ORDER BY timestamp DESC LIMIT ?",
+        "SELECT id, title, url, summary, app, workspace, timestamp FROM contexts ORDER BY timestamp DESC LIMIT ?",
         (limit,),
     )
     rows = cursor.fetchall()
@@ -114,12 +194,31 @@ def get_all_contexts() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_contexts_before(timestamp: int, since: Optional[int] = None) -> list[dict]:
+    """Retrieve contexts up to a specific Unix timestamp, optionally within a window."""
+    conn = _get_conn()
+    cursor = conn.cursor()
+    if since:
+        cursor.execute(
+            "SELECT * FROM contexts WHERE timestamp <= ? AND timestamp >= ? ORDER BY timestamp ASC",
+            (timestamp, since),
+        )
+    else:
+        cursor.execute(
+            "SELECT * FROM contexts WHERE timestamp <= ? ORDER BY timestamp ASC",
+            (timestamp,),
+        )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_context_by_id(context_id: int) -> Optional[dict]:
     """Retrieve a single context by its ID."""
     conn = _get_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, title, url, summary, timestamp FROM contexts WHERE id = ?",
+        "SELECT id, title, url, summary, app, workspace, timestamp FROM contexts WHERE id = ?",
         (context_id,),
     )
     row = cursor.fetchone()
